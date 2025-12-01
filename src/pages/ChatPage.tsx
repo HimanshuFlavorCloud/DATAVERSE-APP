@@ -83,13 +83,11 @@ export function ChatPage() {
 
 		setMessages((prev) => [...prev, userMessage]);
 		setDraft("");
-		setSelectedMessage(userMessage);
 		setIsResponding(true);
 
 		try {
 			const reply = await getAssistantReply(userMessage.content);
 			setMessages((prev) => [...prev, reply]);
-			setSelectedMessage(reply);
 		} finally {
 			setIsResponding(false);
 		}
@@ -114,15 +112,14 @@ export function ChatPage() {
 				/>
 			) : null}
 
-			<div className="flex flex-1 justify-center overflow-hidden">
-				<main className="relative flex w-full max-w-[72rem] flex-1 overflow-hidden">
-					<section
-						aria-label="Chat thread"
-						className={combineClasses(
-							"flex flex-1 flex-col transition-[margin-right] duration-300 ease-out",
-							isPanelOpen ? "lg:mr-[28rem]" : ""
-						)}
-					>
+			<div
+				className={combineClasses(
+					"flex flex-1 justify-center overflow-hidden transition-[padding] duration-300 ease-out",
+					isPanelOpen ? "lg:pr-[28rem]" : ""
+				)}
+			>
+				<main className="relative flex w-full max-w-[clamp(40rem,80%,80rem)] flex-1 overflow-hidden">
+					<section aria-label="Chat thread" className="flex flex-1 flex-col">
 						<div className="flex-1 scrollbar-none overflow-y-auto px-6 py-8 lg:px-10">
 							<div className="flex flex-col gap-5">
 								{messages.map((message) =>
@@ -148,7 +145,7 @@ export function ChatPage() {
 							</div>
 						</div>
 						<form
-							className="sticky bottom-6 mx-6 flex items-end gap-4 rounded-3xl border border-slate-200 bg-white/95 px-4 py-4 shadow-card backdrop-blur dark:border-slate-700 dark:bg-slate-900/80 lg:mx-10"
+							className="sticky bottom-6 mx-auto flex w-full max-w-[72rem] items-end gap-4 rounded-3xl border border-slate-200 bg-white/95 px-4 py-4 shadow-card backdrop-blur dark:border-slate-700 dark:bg-slate-900/80 sm:w-[80%]"
 							onSubmit={handleSend}
 						>
 							<textarea
@@ -184,14 +181,14 @@ export function ChatPage() {
 
 					<div
 						className={combineClasses(
-							"pointer-events-none absolute inset-y-0 right-0 flex w-full max-w-full transform transition-transform duration-300 ease-out sm:max-w-[26rem]",
-							isPanelOpen ? "translate-x-0 pointer-events-auto" : "translate-x-full"
+							"pointer-events-none fixed bottom-0 right-0 z-40 flex h-[calc(100dvh-6rem)] w-full max-w-full transform transition-transform duration-300 ease-out sm:right-6 sm:w-[24rem] sm:max-w-[26rem] sm:rounded-3xl lg:right-10 lg:w-[26rem]",
+							isPanelOpen ? "translate-x-0 pointer-events-auto" : "translate-x-full sm:translate-x-[calc(100%+1.5rem)]"
 						)}
 						aria-hidden={!isPanelOpen}
 					>
 						{selectedMessage ? (
 							<ResponsePanel
-								className="h-full w-full"
+								className="h-full w-full rounded-none border border-slate-200 bg-white/95 shadow-card dark:border-slate-800 dark:bg-slate-900/85 sm:rounded-3xl"
 								message={selectedMessage}
 								onClose={() => setSelectedMessage(undefined)}
 							/>
