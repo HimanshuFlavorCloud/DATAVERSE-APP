@@ -4,13 +4,11 @@ import { combineClasses } from "../../utils/classes";
 
 type MessageLayoutProps = {
   message: ChatMessage;
-  onSelect: (message: ChatMessage) => void;
   orientation: "left" | "right";
 };
 
 export function MessageLayout({
   message,
-  onSelect,
   orientation
 }: MessageLayoutProps) {
   const containerClass = combineClasses(
@@ -30,14 +28,8 @@ export function MessageLayout({
   return (
     <article
       className={containerClass}
-      onClick={() => onSelect(message)}
       role="button"
       tabIndex={0}
-      onKeyDown={(event) => {
-        if (event.key === "Enter" || event.key === " ") {
-          onSelect(message);
-        }
-      }}
     >
       <div className={bubbleClass}>
         <MarkdownMessage content={message.content} className={markdownAlignment} />

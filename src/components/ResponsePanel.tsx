@@ -18,17 +18,18 @@ export function ResponsePanel({ message, onClose, className }: ResponsePanelProp
     "flex h-full flex-col gap-6 border-l border-slate-200 bg-white/90 p-6 shadow-card backdrop-blur overflow-y-auto dark:border-slate-800 dark:bg-slate-900/85",
     className
   );
+  const sqlText = message?.details ?? "";
+  const normalizedSql = sqlText.replace(/\r\n/g, "\n");
+  const sqlBody = normalizedSql.trim();
+  const sqlMarkdown = sqlBody.length
+    ? ["```sql", sqlBody, "```"].join("\n")
+    : "";
 
   return (
     <aside className={panelClass}>
       <header className="flex items-start justify-between gap-4 border-b border-slate-200 pb-4 dark:border-slate-800">
         <div className="space-y-1">
-          <h2 className="text-base font-semibold tracking-tight">Response details</h2>
-          {message ? (
-            <p className="text-sm text-slate-500 dark:text-slate-400">
-              Insights for the selected reply.
-            </p>
-          ) : null}
+          <h2 className="text-base font-semibold tracking-tight">Query details</h2>
         </div>
         <button
           type="button"
@@ -51,14 +52,8 @@ export function ResponsePanel({ message, onClose, className }: ResponsePanelProp
             <time className="text-slate-600 dark:text-slate-300" dateTime={message.createdAt}>
               {formatter.format(new Date(message.createdAt))}
             </time>
-            {message.tokens ? (
-              <>
-                <span className="h-1 w-1 rounded-full bg-slate-300 dark:bg-slate-600" />
-                <span className="text-slate-600 dark:text-slate-300">{message.tokens} tokens</span>
-              </>
-            ) : null}
           </div>
-          <MarkdownMessage content={message.content} />
+          {sqlMarkdown ? <MarkdownMessage content={sqlMarkdown} /> : null}
         </div>
       ) : (
         <div className="flex flex-1 items-center justify-center rounded-2xl border border-dashed border-slate-300 bg-white/40 p-8 text-center text-sm text-slate-500 dark:border-slate-700 dark:bg-slate-900/50 dark:text-slate-400">

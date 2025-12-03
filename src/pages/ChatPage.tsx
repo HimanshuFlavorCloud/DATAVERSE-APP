@@ -1,4 +1,4 @@
-import { FormEvent, useEffect, useRef, useState } from "react";
+import { FormEvent, useCallback, useEffect, useRef, useState } from "react";
 import { useNavigate } from "react-router-dom";
 import { ResponsePanel } from "../components/ResponsePanel";
 import { AssistantMessage } from "../components/chat/AssistantMessage";
@@ -6,37 +6,12 @@ import { AssistantTypingIndicator } from "../components/chat/AssistantTypingIndi
 import { ChatHeader } from "../components/chat/ChatHeader";
 import { UserMessage } from "../components/chat/UserMessage";
 import { useAuth } from "../contexts/AuthContext";
-import type { ChatMessage } from "../types/chat";
+import type { ChatMessage, ChatResponse } from "../types/chat";
 import { createId } from "../utils/id";
 import { combineClasses } from "../utils/classes";
+import { CHAT_ENDPOINT, EXECUTE_QUERY_ENDPOINT } from "../config";
 
 const now = () => new Date().toISOString();
-
-const seededReplies = [
-	"Sure! Here's a quick walkthrough of how to structure your dataset.\n\n1. **Collect** the raw files and keep them in a `/raw` folder.\n2. **Normalize** each record so that the fields match what your downstream model expects.\n3. **Version** the cleaned set and store the metadata in a small JSON manifest.\n\nLet me know if you want the manifest template as well!",
-	"Absolutely! Here's the SQL query you asked for:\n\n```sql\nSELECT country, COUNT(*) as total_users\nFROM users\nWHERE created_at >= DATEADD(day, -30, CURRENT_DATE)\nGROUP BY country\nORDER BY total_users DESC;\n```\n\nThis groups the new users by country for the past 30 days.",
-	"Here's a recap of the experiment run:\n\n- **Model:** gpt-4.1-mini\n- **Dataset:** curated/intent-detection-v5\n- **Outcome:** 92.4% accuracy on the holdout set\n- **Notes:** F1 dipped on the `transfer` intent; consider augmenting those examples.",
-	"To containerize the service, add this Dockerfile snippet:\n\n```dockerfile\nFROM node:20-alpine\nWORKDIR /app\nCOPY package.json package-lock.json ./\nRUN npm ci\nCOPY . .\nCMD [ \"npm\", \"start\" ]\n```\n\nIt keeps the image lightweight while using the pinned dependency tree.",
-	"Here's the markdown summary you asked me to sanitize:\n\n> DataVerse pipelines orchestrate ingestion, validation, and enrichment.\n> Each stage streams telemetry, so you can observe drift in real time.\n> Schedules are declarative YAML, so everything lives in Git."
-];
-
-function getAssistantReply(prompt: string): Promise<ChatMessage> {
-	const syntheticContent = seededReplies[Math.floor(Math.random() * seededReplies.length)];
-	const stitched = `I processed your request:\n\n> ${prompt}\n\n${syntheticContent}`;
-
-	return new Promise((resolve) => {
-		setTimeout(() => {
-			resolve({
-				id: createId(),
-				role: "assistant",
-				content: stitched,
-				createdAt: now(),
-				tokens: 512,
-				title: stitched.split("\n")[0]?.replace(/^#+\s*/, "").slice(0, 50) ?? "Assistant reply"
-			});
-		}, 750);
-	});
-}
 
 const initialMessages: ChatMessage[] = [
 	{
@@ -45,23 +20,226 @@ const initialMessages: ChatMessage[] = [
 		createdAt: now(),
 		tokens: 386,
 		title: "Welcome to DataVerse Chat",
-		content:
-			"Hi there! Ask me anything about your data pipelines.\n\nI can help you explore datasets, generate SQL, or summarize experiments."
+		content: "Hi there! Ask me anything about your data pipelines.\n\nI can help you explore datasets, generate SQL, or summarize experiments."
 	}
 ];
 
+const STREAM_INTERVAL_MS = 50;
+const CONTENT_CHUNK_SIZE = 10;
+const DETAIL_CHUNK_SIZE = 10;
+const RESULT_CHUNK_SIZE = 60;
+
+function chunkByWhitespace(text: string, size: number): string[] {
+	if (!text) {
+		return [];
+	}
+
+	if (text.length <= size) {
+		return [text];
+	}
+
+	const tokens = text.split(/(\s+)/);
+	const chunks: string[] = [];
+	let current = "";
+
+	for (const token of tokens) {
+		const nextCandidate = current + token;
+		if (current && nextCandidate.length > size) {
+			chunks.push(current);
+			const trimmedToken = token.replace(/^\s+/, "");
+			current = trimmedToken.length ? trimmedToken : token;
+			continue;
+		}
+
+		current = nextCandidate;
+	}
+
+	if (current) {
+		chunks.push(current);
+	}
+
+	return chunks;
+}
+
+function chunkPreservingNewlines(text: string, size: number): string[] {
+	const lines = text.split(/(?<=\n)/);
+	const chunks: string[] = [];
+	let current = "";
+
+	for (const line of lines) {
+		if ((current + line).length > size && current) {
+			chunks.push(current);
+			current = line;
+		} else {
+			current += line;
+		}
+	}
+
+	if (current) {
+		chunks.push(current);
+	}
+
+	return chunks;
+}
+
+function buildMarkdownTable(rows: Array<Record<string, unknown>>): string {
+	if (!Array.isArray(rows) || rows.length === 0) {
+		return "No rows returned.";
+	}
+
+	const headers = Object.keys(rows[0] ?? {});
+	if (headers.length === 0) {
+		return "No fields available.";
+	}
+
+	const headerLine = `| ${headers.join(" | ")} |`;
+	const separatorLine = `| ${headers.map(() => "---").join(" | ")} |`;
+	const bodyLines = rows.map((row) => {
+		const values = headers.map((header) => {
+			const value = row?.[header];
+			if (value === null || value === undefined) {
+				return "";
+			}
+			if (typeof value === "object") {
+				return JSON.stringify(value);
+			}
+			return String(value);
+		});
+		return `| ${values.join(" | ")} |`;
+	});
+
+	return [headerLine, separatorLine, ...bodyLines].join("\n");
+}
+
 export function ChatPage() {
-	const { user, logout } = useAuth();
+	const { logout } = useAuth();
 	const navigate = useNavigate();
 	const [messages, setMessages] = useState<ChatMessage[]>(initialMessages);
 	const [draft, setDraft] = useState("");
 	const [isResponding, setIsResponding] = useState(false);
 	const [selectedMessage, setSelectedMessage] = useState<ChatMessage | undefined>(undefined);
 	const bottomRef = useRef<HTMLDivElement | null>(null);
+	const streamTimersRef = useRef<Map<string, number>>(new Map());
 
 	useEffect(() => {
 		bottomRef.current?.scrollIntoView({ behavior: "smooth" });
 	}, [messages.length]);
+
+	useEffect(() => {
+		if (!selectedMessage) {
+			return;
+		}
+
+		// Keep the details panel synced with streaming updates.
+		const refreshedSelection = messages.find((message) => message.id === selectedMessage.id);
+		if (refreshedSelection && refreshedSelection !== selectedMessage) {
+			setSelectedMessage(refreshedSelection);
+		}
+	}, [messages, selectedMessage]);
+
+	useEffect(() => () => {
+		streamTimersRef.current.forEach((timeoutId) => {
+			window.clearTimeout(timeoutId);
+		});
+		streamTimersRef.current.clear();
+	}, []);
+
+	// Simulate assistant streaming by appending message content and details together on a timer.
+	const streamAssistantMessage = useCallback(
+		(messageId: string, contentChunks: string[], detailChunks: string[]) => {
+			if (contentChunks.length === 0 && detailChunks.length === 0) {
+				return Promise.resolve();
+			}
+
+			const timers = streamTimersRef.current;
+			const clearTimer = () => {
+				const timeoutId = timers.get(messageId);
+				if (timeoutId) {
+					window.clearTimeout(timeoutId);
+					timers.delete(messageId);
+				}
+			};
+
+			return new Promise<void>((resolve) => {
+				let contentIndex = 0;
+				let detailIndex = 0;
+				let finished = false;
+
+				const complete = () => {
+					if (finished) {
+						return;
+					}
+					finished = true;
+					clearTimer();
+					resolve();
+				};
+
+				const tick = () => {
+					const nextContentChunk = contentChunks[contentIndex];
+					const nextDetailChunk = detailChunks[detailIndex];
+					const hasContent = typeof nextContentChunk === "string";
+					const hasDetail = typeof nextDetailChunk === "string";
+
+					if (!hasContent && !hasDetail) {
+						complete();
+						return;
+					}
+
+					setMessages((previousMessages) =>
+						previousMessages.map((message) => {
+							if (message.id !== messageId) {
+								return message;
+							}
+
+							let nextMessage = message;
+
+							if (hasContent) {
+								nextMessage = {
+									...nextMessage,
+									content: `${nextMessage.content ?? ""}${nextContentChunk ?? ""}`
+								};
+							}
+
+							if (hasDetail) {
+								nextMessage = {
+									...nextMessage,
+									details: `${nextMessage.details ?? ""}${nextDetailChunk ?? ""}`
+								};
+							}
+
+							return nextMessage;
+						})
+					);
+
+					if (hasContent) {
+						contentIndex += 1;
+					}
+
+					if (hasDetail) {
+						detailIndex += 1;
+					}
+
+					window.requestAnimationFrame(() => {
+						bottomRef.current?.scrollIntoView({ behavior: "smooth" });
+					});
+
+					const hasRemaining = contentIndex < contentChunks.length || detailIndex < detailChunks.length;
+					if (!hasRemaining) {
+						complete();
+						return;
+					}
+
+					clearTimer();
+					const timeoutId = window.setTimeout(tick, STREAM_INTERVAL_MS);
+					timers.set(messageId, timeoutId);
+				};
+
+				clearTimer();
+				tick();
+			});
+		},
+		[bottomRef, setMessages]
+	);
 
 	const handleLogout = () => {
 		logout();
@@ -86,19 +264,82 @@ export function ChatPage() {
 		setIsResponding(true);
 
 		try {
-			const reply = await getAssistantReply(userMessage.content);
-			setMessages((prev) => [...prev, reply]);
+			const reply = await fetch(CHAT_ENDPOINT, {
+				method: "POST",
+				body: JSON.stringify({
+					question: userMessage.content
+				}),
+				credentials: 'include'
+			});
+			const data: ChatResponse = await reply.json();
+			const assistantMessage: ChatMessage = {
+				id: createId(),
+				role: "assistant",
+				content: "",
+				details: data.sql ? "" : undefined,
+				createdAt: now()
+			};
+			const summaryText = typeof data.md_summary === "string" ? data.md_summary : "";
+			const rawSql = typeof data.sql === "string" ? data.sql : "";
+			const normalizedSummary = summaryText.replace(/\r\n/g, "\n");
+			const normalizedSql = rawSql.replace(/\r\n/g, "\n");
+
+			const contentChunks = chunkByWhitespace(normalizedSummary, CONTENT_CHUNK_SIZE);
+			const detailChunks = normalizedSql ? chunkPreservingNewlines(normalizedSql, DETAIL_CHUNK_SIZE) : [];
+
+			setMessages((prev) => [...prev, assistantMessage]);
+			if (rawSql.trim()) {
+				setSelectedMessage(assistantMessage);
+			}
+
+			await streamAssistantMessage(assistantMessage.id, contentChunks, detailChunks);
+			await handleQueryResult(data, assistantMessage.id);
+		} catch (error) {
+			console.error("Failed to fetch assistant response", error);
 		} finally {
 			setIsResponding(false);
 		}
 	};
+
+	const handleQueryResult = useCallback(
+		async (data: ChatResponse, messageId: string) => {
+			if (!data.sql) {
+				return;
+			}
+
+			try {
+				const response = await fetch(EXECUTE_QUERY_ENDPOINT, {
+					method: "POST",
+					credentials: "include",
+					body: JSON.stringify({ sql: data.sql })
+				});
+				const fetchedData: unknown = await response.json();
+				const resultPayload = fetchedData as { data?: unknown; row_count?: number };
+				const rows = Array.isArray(resultPayload.data)
+					? (resultPayload.data as Array<Record<string, unknown>>)
+					: [];
+
+				const tableMarkdown = buildMarkdownTable(rows);
+				const infoLines: string[] = ["\n\n### Query Results"];
+				if (typeof resultPayload.row_count === "number") {
+					infoLines.push(`Rows returned: ${resultPayload.row_count}`);
+				}
+				infoLines.push(tableMarkdown);
+				const tableSection = infoLines.join("\n");
+				const tableChunks = chunkPreservingNewlines(tableSection, RESULT_CHUNK_SIZE);
+				await streamAssistantMessage(messageId, tableChunks, []);
+			} catch (error) {
+				console.error("Failed to execute query", error);
+			}
+		},
+		[streamAssistantMessage]
+	);
 
 	const handleSend = async (event: FormEvent) => {
 		event.preventDefault();
 		await submitMessage();
 	};
 
-	const userInitial = user?.name?.[0]?.toUpperCase() ?? "U";
 	const isPanelOpen = Boolean(selectedMessage);
 
 	return (
@@ -127,16 +368,11 @@ export function ChatPage() {
 										<AssistantMessage
 											key={message.id}
 											message={message}
-											isSelected={selectedMessage?.id === message.id}
-											onSelect={setSelectedMessage}
 										/>
 									) : (
 										<UserMessage
 											key={message.id}
 											message={message}
-											isSelected={selectedMessage?.id === message.id}
-											onSelect={setSelectedMessage}
-											userInitial={userInitial}
 										/>
 									)
 								)}

@@ -26,7 +26,7 @@ export function LoginPage() {
       otp: ""
     }
   });
-  const [phase, setPhase] = useState<Phase>("collect-email");
+  const [phase, setPhase] = useState<Phase>("verify-otp");
   const [pendingEmail, setPendingEmail] = useState("dennawequouye-9209@yopmail.com");
   const [submitError, setSubmitError] = useState<string | null>(null);
   const [infoMessage, setInfoMessage] = useState<string | null>(null);
