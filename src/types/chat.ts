@@ -8,6 +8,8 @@ export type ChatMessage = {
   tokens?: number;
   title?: string;
   details?: string;
+  result?: string;
+  isResultLoading?: boolean;
 };
 
 export interface ChatResponse {

@@ -12,7 +12,7 @@ export function MessageLayout({
   orientation
 }: MessageLayoutProps) {
   const containerClass = combineClasses(
-    "group flex gap-4 rounded-3xl border border-transparent p-5 shadow-sm backdrop-blur transition flex-1",
+    "group flex flex-col gap-4 rounded-3xl border border-transparent p-5 shadow-sm backdrop-blur transition flex-1",
     orientation === "left" ? "flex-row" : "flex-row-reverse text-right",
   );
 
@@ -21,9 +21,9 @@ export function MessageLayout({
     orientation === "left" ? "items-start text-left" : "items-end text-right"
   );
 
-	const markdownAlignment = combineClasses(
-		message.role === 'user' ? "py-0 px-4 border border-white rounded-[1rem_1rem_0_1rem]" : "",
-		orientation === "left" ? undefined : "text-right prose-headings:text-right prose-p:text-right prose-ul:text-right prose-ol:text-right prose-li:text-right")
+  const markdownAlignment = combineClasses(
+    message.role === 'user' ? "py-0 px-4 border border-white rounded-[1rem_1rem_0_1rem]" : "",
+    orientation === "left" ? undefined : "text-right prose-headings:text-right prose-p:text-right prose-ul:text-right prose-ol:text-right prose-li:text-right")
 
   return (
     <article

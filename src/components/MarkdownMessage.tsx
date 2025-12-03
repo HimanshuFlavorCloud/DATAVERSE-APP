@@ -91,7 +91,7 @@ const MarkdownCodeBlock = ({ inline, className: codeClassName, children, lang, .
           {copied ? "Copied" : "Copy"}
         </button>
       </div>
-      <pre className={classNames("overflow-x-auto p-4 text-xs", codeClassName)}>
+      <pre className={classNames("overflow-x-auto scrollbar-none p-4 text-xs ", codeClassName)}>
         <code className="font-mono" {...props}>
           {children}
         </code>
@@ -104,18 +104,20 @@ const markdownComponents: Components = {
   code: MarkdownCodeBlock,
   table({ className: tableClassName, ...props }: TableProps) {
     return (
-      <div className="overflow-x-auto">
-        <div className="min-w-full rounded-2xl border border-slate-200 bg-white shadow-sm dark:border-slate-700 dark:bg-slate-900">
-          <table
-            className={classNames(
-              "min-w-full divide-y divide-slate-200 text-xs sm:text-sm dark:divide-slate-700",
-              "[&>thead>tr>th]:bg-slate-50 [&>thead>tr>th]:px-4 [&>thead>tr>th]:py-3 [&>thead>tr>th]:text-left [&>thead>tr>th]:font-semibold [&>thead>tr>th]:uppercase [&>thead>tr>th]:tracking-wide [&>thead>tr>th]:text-slate-500 dark:[&>thead>tr>th]:bg-slate-900 dark:[&>thead>tr>th]:text-slate-300",
-              "[&>tbody>tr]:odd:bg-slate-50/70 [&>tbody>tr]:even:bg-white [&>tbody>tr>td]:px-4 [&>tbody>tr>td]:py-2 [&>tbody>tr>td]:text-slate-600 dark:[&>tbody>tr]:odd:bg-slate-900/60 dark:[&>tbody>tr]:even:bg-slate-900/30 dark:[&>tbody>tr>td]:text-slate-200",
-              "[&>tbody>tr:hover]:bg-sky-50/70 dark:[&>tbody>tr:hover]:bg-slate-800/50 transition-colors",
-              tableClassName
-            )}
-            {...props}
-          />
+      <div className="overflow-x-auto scrollbar-none">
+        <div className="inline-block min-w-full align-middle">
+          <div className="overflow-hidden rounded-2xl border border-slate-200 bg-white/95 shadow-sm dark:border-slate-700 dark:bg-slate-900">
+            <table
+              className={classNames(
+                "min-w-full divide-y divide-slate-200 text-xs sm:text-sm dark:divide-slate-700",
+                "[&>thead>tr>th]:bg-slate-50 [&>thead>tr>th]:px-4 [&>thead>tr>th]:py-3 [&>thead>tr>th]:text-left [&>thead>tr>th]:font-semibold [&>thead>tr>th]:uppercase [&>thead>tr>th]:tracking-wide [&>thead>tr>th]:text-slate-500 dark:[&>thead>tr>th]:bg-slate-900 dark:[&>thead>tr>th]:text-slate-300",
+                "[&>tbody>tr]:odd:bg-slate-50/70 [&>tbody>tr]:even:bg-white [&>tbody>tr>td]:px-4 [&>tbody>tr>td]:py-2 [&>tbody>tr>td]:text-slate-600 dark:[&>tbody>tr]:odd:bg-slate-900/60 dark:[&>tbody>tr]:even:bg-slate-900/30 dark:[&>tbody>tr>td]:text-slate-200",
+                "[&>tbody>tr:hover]:bg-sky-50/70 dark:[&>tbody>tr:hover]:bg-slate-800/50 transition-colors",
+                tableClassName
+              )}
+              {...props}
+            />
+          </div>
         </div>
       </div>
     );

@@ -146,8 +146,8 @@ export function ChatPage() {
 
 	// Simulate assistant streaming by appending message content and details together on a timer.
 	const streamAssistantMessage = useCallback(
-		(messageId: string, contentChunks: string[], detailChunks: string[]) => {
-			if (contentChunks.length === 0 && detailChunks.length === 0) {
+		(messageId: string, contentChunks: string[], detailChunks: string[], resultChunks: string[] = []) => {
+			if (contentChunks.length === 0 && detailChunks.length === 0 && resultChunks.length === 0) {
 				return Promise.resolve();
 			}
 
@@ -163,6 +163,7 @@ export function ChatPage() {
 			return new Promise<void>((resolve) => {
 				let contentIndex = 0;
 				let detailIndex = 0;
+				let resultIndex = 0;
 				let finished = false;
 
 				const complete = () => {
@@ -177,10 +178,12 @@ export function ChatPage() {
 				const tick = () => {
 					const nextContentChunk = contentChunks[contentIndex];
 					const nextDetailChunk = detailChunks[detailIndex];
+					const nextResultChunk = resultChunks[resultIndex];
 					const hasContent = typeof nextContentChunk === "string";
 					const hasDetail = typeof nextDetailChunk === "string";
+					const hasResult = typeof nextResultChunk === "string";
 
-					if (!hasContent && !hasDetail) {
+					if (!hasContent && !hasDetail && !hasResult) {
 						complete();
 						return;
 					}
@@ -207,6 +210,13 @@ export function ChatPage() {
 								};
 							}
 
+							if (hasResult) {
+								nextMessage = {
+									...nextMessage,
+									result: `${nextMessage.result ?? ""}${nextResultChunk ?? ""}`
+								};
+							}
+
 							return nextMessage;
 						})
 					);
@@ -219,11 +229,18 @@ export function ChatPage() {
 						detailIndex += 1;
 					}
 
+					if (hasResult) {
+						resultIndex += 1;
+					}
+
 					window.requestAnimationFrame(() => {
 						bottomRef.current?.scrollIntoView({ behavior: "smooth" });
 					});
 
-					const hasRemaining = contentIndex < contentChunks.length || detailIndex < detailChunks.length;
+					const hasRemaining =
+						contentIndex < contentChunks.length ||
+						detailIndex < detailChunks.length ||
+						resultIndex < resultChunks.length;
 					if (!hasRemaining) {
 						complete();
 						return;
@@ -269,7 +286,7 @@ export function ChatPage() {
 				body: JSON.stringify({
 					question: userMessage.content
 				}),
-				credentials: 'include'
+				credentials: "include"
 			});
 			const data: ChatResponse = await reply.json();
 			const assistantMessage: ChatMessage = {
@@ -277,7 +294,8 @@ export function ChatPage() {
 				role: "assistant",
 				content: "",
 				details: data.sql ? "" : undefined,
-				createdAt: now()
+				createdAt: now(),
+				isResultLoading: Boolean(typeof data.sql === "string" && data.sql.trim())
 			};
 			const summaryText = typeof data.md_summary === "string" ? data.md_summary : "";
 			const rawSql = typeof data.sql === "string" ? data.sql : "";
@@ -307,6 +325,18 @@ export function ChatPage() {
 				return;
 			}
 
+			setMessages((previous) =>
+				previous.map((message) =>
+					message.id === messageId
+						? {
+							...message,
+							isResultLoading: true,
+							result: ""
+						}
+						: message
+				)
+			);
+
 			try {
 				const response = await fetch(EXECUTE_QUERY_ENDPOINT, {
 					method: "POST",
@@ -327,9 +357,30 @@ export function ChatPage() {
 				infoLines.push(tableMarkdown);
 				const tableSection = infoLines.join("\n");
 				const tableChunks = chunkPreservingNewlines(tableSection, RESULT_CHUNK_SIZE);
-				await streamAssistantMessage(messageId, tableChunks, []);
+				await streamAssistantMessage(messageId, [], [], tableChunks);
 			} catch (error) {
 				console.error("Failed to execute query", error);
+				setMessages((previous) =>
+					previous.map((message) =>
+						message.id === messageId
+							? {
+								...message,
+								result: "Failed to execute query. Please try again."
+							}
+							: message
+					)
+				);
+			} finally {
+				setMessages((previous) =>
+					previous.map((message) =>
+						message.id === messageId
+							? {
+								...message,
+								isResultLoading: false
+							}
+							: message
+					)
+				);
 			}
 		},
 		[streamAssistantMessage]
@@ -356,7 +407,7 @@ export function ChatPage() {
 			<div
 				className={combineClasses(
 					"flex flex-1 justify-center overflow-hidden transition-[padding] duration-300 ease-out",
-					isPanelOpen ? "lg:pr-[28rem]" : ""
+					isPanelOpen ? "lg:pr-[32rem]" : ""
 				)}
 			>
 				<main className="relative flex w-full max-w-[clamp(40rem,80%,80rem)] flex-1 overflow-hidden">
@@ -417,7 +468,7 @@ export function ChatPage() {
 
 					<div
 						className={combineClasses(
-							"pointer-events-none fixed bottom-0 right-0 z-40 flex h-[calc(100dvh-6rem)] w-full max-w-full transform transition-transform duration-300 ease-out sm:right-6 sm:w-[24rem] sm:max-w-[26rem] sm:rounded-3xl lg:right-10 lg:w-[26rem]",
+							"pointer-events-none fixed bottom-0 right-0 z-40 flex h-[calc(100dvh-6rem)] w-full max-w-full transform transition-transform duration-300 ease-out sm:right-6 sm:w-[28rem] sm:max-w-[30rem] sm:rounded-3xl lg:right-10 lg:w-[30rem] xl:w-[32rem]",
 							isPanelOpen ? "translate-x-0 pointer-events-auto" : "translate-x-full sm:translate-x-[calc(100%+1.5rem)]"
 						)}
 						aria-hidden={!isPanelOpen}

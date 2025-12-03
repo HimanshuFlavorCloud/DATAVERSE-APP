@@ -5,3 +5,5 @@ export const VERIFY_ENDPOINT = `${API_ENDPOINT}/login/verify`;
 export const LOGOUT_ENDPOINT = `${API_ENDPOINT}/logout`;
 export const CHAT_ENDPOINT = `${API_ENDPOINT}/generate_sql`;
 export const EXECUTE_QUERY_ENDPOINT = `${API_ENDPOINT}/execute`;
+
+export const SCHEDULE_REPORTS_ENDPOINT = `${API_ENDPOINT}/scheduled-reports`;
