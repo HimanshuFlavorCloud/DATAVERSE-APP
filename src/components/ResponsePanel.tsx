@@ -38,7 +38,7 @@ export function ResponsePanel({ message, onClose, className }: ResponsePanelProp
   const { user } = useAuth();
   const [isExporting, setIsExporting] = useState(false);
   const [isScheduleOpen, setIsScheduleOpen] = useState(false);
-  const [isQueryExpanded, setIsQueryExpanded] = useState(false);
+  const [isQueryExpanded, setIsQueryExpanded] = useState(true);
   const scheduleMenuRef = useRef<HTMLDivElement>(null);
   const sqlText = message?.details ?? "";
   const normalizedSql = sqlText.replace(/\r\n/g, "\n");

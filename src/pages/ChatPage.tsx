@@ -311,14 +311,14 @@ export function ChatPage() {
 			}
 
 			await streamAssistantMessage(assistantMessage.id, contentChunks, detailChunks);
-			await handleQueryResult(data, assistantMessage.id);
+			await handleQueryResult(data, userMessage.content, assistantMessage.id);
 		} catch (error) {
 			console.error("Failed to fetch assistant response", error);
 			setIsResponding(false);
 		}
 	};
 
-	const handleQueryResult = async (data: ChatResponse, messageId: string) => {
+	const handleQueryResult = async (data: ChatResponse, question: string, messageId: string) => {
 		if (!data.sql) {
 			return;
 		}
