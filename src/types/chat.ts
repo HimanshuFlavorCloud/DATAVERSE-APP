@@ -9,7 +9,6 @@ export type ChatMessage = {
   title?: string;
   details?: string;
   result?: string;
-  isResultLoading?: boolean;
 };
 
 export interface ChatResponse {

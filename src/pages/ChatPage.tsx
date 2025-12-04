@@ -120,7 +120,7 @@ export function ChatPage() {
 	const [selectedMessage, setSelectedMessage] = useState<ChatMessage | undefined>(undefined);
 	const bottomRef = useRef<HTMLDivElement | null>(null);
 	const streamTimersRef = useRef<Map<string, number>>(new Map());
-
+	
 	useEffect(() => {
 		bottomRef.current?.scrollIntoView({ behavior: "smooth" });
 	}, [messages.length]);
@@ -288,14 +288,14 @@ export function ChatPage() {
 				}),
 				credentials: "include"
 			});
+			setIsResponding(false);
 			const data: ChatResponse = await reply.json();
 			const assistantMessage: ChatMessage = {
 				id: createId(),
 				role: "assistant",
 				content: "",
 				details: data.sql ? "" : undefined,
-				createdAt: now(),
-				isResultLoading: Boolean(typeof data.sql === "string" && data.sql.trim())
+				createdAt: now()
 			};
 			const summaryText = typeof data.md_summary === "string" ? data.md_summary : "";
 			const rawSql = typeof data.sql === "string" ? data.sql : "";
@@ -314,77 +314,65 @@ export function ChatPage() {
 			await handleQueryResult(data, assistantMessage.id);
 		} catch (error) {
 			console.error("Failed to fetch assistant response", error);
-		} finally {
 			setIsResponding(false);
 		}
 	};
 
-	const handleQueryResult = useCallback(
-		async (data: ChatResponse, messageId: string) => {
-			if (!data.sql) {
-				return;
-			}
+	const handleQueryResult = async (data: ChatResponse, messageId: string) => {
+		if (!data.sql) {
+			return;
+		}
 
+		setMessages((previous) =>
+			previous.map((message) =>
+				message.id === messageId
+					? {
+						...message,
+						result: ""
+					}
+					: message
+			)
+		);
+
+		setIsResponding(true);
+
+		try {
+			const response = await fetch(EXECUTE_QUERY_ENDPOINT, {
+				method: "POST",
+				credentials: "include",
+				body: JSON.stringify({ sql: data.sql })
+			});
+			setIsResponding(false);
+			const fetchedData: unknown = await response.json();
+			const resultPayload = fetchedData as { data?: unknown; row_count?: number };
+			const rows = Array.isArray(resultPayload.data)
+				? (resultPayload.data as Array<Record<string, unknown>>)
+				: [];
+
+			const tableMarkdown = buildMarkdownTable(rows);
+			const infoLines: string[] = ["\n\n### Query Results"];
+			if (typeof resultPayload.row_count === "number") {
+				infoLines.push(`Rows returned: ${resultPayload.row_count}`);
+			}
+			infoLines.push(tableMarkdown);
+			const tableSection = infoLines.join("\n");
+			const tableChunks = chunkPreservingNewlines(tableSection, RESULT_CHUNK_SIZE);
+			await streamAssistantMessage(messageId, [], [], tableChunks);
+		} catch (error) {
+			console.error("Failed to execute query", error);
 			setMessages((previous) =>
 				previous.map((message) =>
 					message.id === messageId
 						? {
 							...message,
-							isResultLoading: true,
-							result: ""
+							result: "Failed to execute query. Please try again."
 						}
 						: message
 				)
 			);
-
-			try {
-				const response = await fetch(EXECUTE_QUERY_ENDPOINT, {
-					method: "POST",
-					credentials: "include",
-					body: JSON.stringify({ sql: data.sql })
-				});
-				const fetchedData: unknown = await response.json();
-				const resultPayload = fetchedData as { data?: unknown; row_count?: number };
-				const rows = Array.isArray(resultPayload.data)
-					? (resultPayload.data as Array<Record<string, unknown>>)
-					: [];
-
-				const tableMarkdown = buildMarkdownTable(rows);
-				const infoLines: string[] = ["\n\n### Query Results"];
-				if (typeof resultPayload.row_count === "number") {
-					infoLines.push(`Rows returned: ${resultPayload.row_count}`);
-				}
-				infoLines.push(tableMarkdown);
-				const tableSection = infoLines.join("\n");
-				const tableChunks = chunkPreservingNewlines(tableSection, RESULT_CHUNK_SIZE);
-				await streamAssistantMessage(messageId, [], [], tableChunks);
-			} catch (error) {
-				console.error("Failed to execute query", error);
-				setMessages((previous) =>
-					previous.map((message) =>
-						message.id === messageId
-							? {
-								...message,
-								result: "Failed to execute query. Please try again."
-							}
-							: message
-					)
-				);
-			} finally {
-				setMessages((previous) =>
-					previous.map((message) =>
-						message.id === messageId
-							? {
-								...message,
-								isResultLoading: false
-							}
-							: message
-					)
-				);
-			}
-		},
-		[streamAssistantMessage]
-	);
+			setIsResponding(false);
+		}
+	}
 
 	const handleSend = async (event: FormEvent) => {
 		event.preventDefault();
@@ -393,9 +381,15 @@ export function ChatPage() {
 
 	const isPanelOpen = Boolean(selectedMessage);
 
+	const handleNewChat = () => {
+		setMessages(initialMessages);
+		setSelectedMessage(undefined);
+		setDraft("");
+	};
+
 	return (
 		<div className="flex h-screen flex-col overflow-hidden bg-slate-50 text-slate-900 transition-colors duration-300 dark:bg-slate-950 dark:text-slate-100">
-			<ChatHeader onLogout={handleLogout} />
+			<ChatHeader onLogout={handleLogout} onNewChat={handleNewChat} />
 
 			{isPanelOpen ? (
 				<div
@@ -419,6 +413,7 @@ export function ChatPage() {
 										<AssistantMessage
 											key={message.id}
 											message={message}
+											onSelect={setSelectedMessage}
 										/>
 									) : (
 										<UserMessage
@@ -432,7 +427,7 @@ export function ChatPage() {
 							</div>
 						</div>
 						<form
-							className="sticky bottom-6 mx-auto flex w-full max-w-[72rem] items-end gap-4 rounded-3xl border border-slate-200 bg-white/95 px-4 py-4 shadow-card backdrop-blur dark:border-slate-700 dark:bg-slate-900/80 sm:w-[80%]"
+							className="sticky bottom-6 mx-auto flex w-full items-end gap-4 rounded-3xl border border-slate-200 bg-white/95 px-4 py-4 shadow-card backdrop-blur dark:border-slate-700 dark:bg-slate-900/80"
 							onSubmit={handleSend}
 						>
 							<textarea

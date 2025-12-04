@@ -105,8 +105,8 @@ const markdownComponents: Components = {
   table({ className: tableClassName, ...props }: TableProps) {
     return (
       <div className="overflow-x-auto scrollbar-none">
-        <div className="inline-block min-w-full align-middle">
-          <div className="overflow-hidden rounded-2xl border border-slate-200 bg-white/95 shadow-sm dark:border-slate-700 dark:bg-slate-900">
+        <div className="block w-full min-w-full align-middle">
+          <div className="overflow-auto scrollbar-none rounded-2xl border border-slate-200 bg-white/95 shadow-sm dark:border-slate-700 dark:bg-slate-900">
             <table
               className={classNames(
                 "min-w-full divide-y divide-slate-200 text-xs sm:text-sm dark:divide-slate-700",

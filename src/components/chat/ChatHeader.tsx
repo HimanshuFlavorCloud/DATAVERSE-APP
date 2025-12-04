@@ -3,9 +3,10 @@ import { useAuth } from "../../contexts/AuthContext";
 
 export type ChatHeaderProps = {
   onLogout: () => void;
+  onNewChat?: () => void;
 };
 
-export function ChatHeader({ onLogout }: ChatHeaderProps) {
+export function ChatHeader({ onLogout, onNewChat }: ChatHeaderProps) {
   const { user } = useAuth();
   const userInitial = user?.name?.[0]?.toUpperCase() ?? "U";
 
@@ -18,6 +19,7 @@ export function ChatHeader({ onLogout }: ChatHeaderProps) {
         <p className="text-sm font-semibold">DataVerse Chat</p>
       </div>
       <div className="flex flex-wrap items-center gap-3">
+        <button onClick={onNewChat} className="inline-flex items-center gap-2 rounded-full border border-slate-200 bg-white/70 px-3 py-1.5 text-sm font-medium text-slate-600 transition hover:border-sky-400 hover:text-slate-900 dark:border-slate-700 dark:bg-slate-900/70 dark:text-slate-200 dark:hover:border-sky-500 dark:hover:text-white" children={"New Chat"} />
         <ThemeToggle />
         <div className="flex items-center gap-3 rounded-full border border-slate-200 bg-white/70 px-3 py-1.5 text-sm shadow-sm dark:border-slate-700 dark:bg-slate-900/60">
           <div className="flex h-9 w-9 items-center justify-center rounded-full bg-sky-500/20 text-sm font-semibold text-sky-600 dark:bg-sky-500/30 dark:text-sky-200">
